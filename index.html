@@ -1,1 +1,483 @@
+```html
+<!--
+צ׳קליסט קשיח לפני כתיבת הקוד:
+1. האם וידאתי ש־mode: 'no-cors' לא מופיע בכלל בקוד? כן.
+2. האם אכפתי את שמות המפתחות המדויקים ב־payload: tickers, startDate, endDate, frequency, action? כן.
+-->
+
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>מערכת חילוץ נתוני מניות</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body {
+      overflow-x: hidden;
+    }
+
+    .mesh-bg {
+      background:
+        radial-gradient(circle at 15% 20%, rgba(16, 185, 129, 0.35), transparent 30%),
+        radial-gradient(circle at 85% 18%, rgba(59, 130, 246, 0.32), transparent 32%),
+        radial-gradient(circle at 50% 85%, rgba(168, 85, 247, 0.25), transparent 35%),
+        linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%);
+      background-size: 140% 140%;
+      animation: meshMove 15s ease-in-out infinite alternate;
+    }
+
+    @keyframes meshMove {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 80%; }
+    }
+
+    .particle {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.35);
+      animation: floatUp linear infinite;
+    }
+
+    @keyframes floatUp {
+      from {
+        transform: translateY(110vh) scale(0.7);
+        opacity: 0;
+      }
+      20% {
+        opacity: 0.8;
+      }
+      to {
+        transform: translateY(-20vh) scale(1.2);
+        opacity: 0;
+      }
+    }
+
+    .glow-button {
+      box-shadow: 0 0 25px rgba(34, 197, 94, 0.55), inset 0 0 18px rgba(255, 255, 255, 0.18);
+      animation: glowPulse 2.3s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% {
+        box-shadow: 0 0 24px rgba(34, 197, 94, 0.45), inset 0 0 18px rgba(255, 255, 255, 0.14);
+      }
+      50% {
+        box-shadow: 0 0 48px rgba(34, 197, 94, 0.85), inset 0 0 22px rgba(255, 255, 255, 0.22);
+      }
+    }
+
+    .loader-ring {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 5px solid rgba(255, 255, 255, 0.18);
+      border-top-color: #22c55e;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .shine {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .shine::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(120%);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+      animation: shineMove 3.4s infinite;
+    }
+
+    @keyframes shineMove {
+      0% { transform: translateX(120%); }
+      50%, 100% { transform: translateX(-120%); }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen mesh-bg text-slate-900">
+  <div id="particles" class="fixed inset-0 pointer-events-none"></div>
+
+  <main class="relative z-10 min-h-screen flex items-center justify-center px-4 py-10">
+    <section class="w-full max-w-6xl backdrop-blur-xl bg-white/80 shadow-2xl rounded-[2rem] border border-white/60 overflow-hidden">
+      <div class="p-6 md:p-10 lg:p-12">
+
+        <header class="mb-9">
+          <div class="inline-flex items-center gap-2 px-4 py-2 mb-5 rounded-full bg-emerald-500/10 text-emerald-700 font-black text-sm border border-emerald-500/20">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            מערכת פיננסית מתקדמת
+          </div>
+
+          <h1 class="text-3xl md:text-5xl font-black tracking-tight text-slate-950 mb-5">
+            חילוץ שערי סגירה והשוואת מניות
+          </h1>
+
+          <p class="text-lg md:text-xl leading-9 text-slate-700 max-w-4xl">
+            ברוכים הבאים למערכת חילוץ הנתונים. כאן תוכלו לשלוף שערי סגירה למספר מניות במקביל, להשוות ביניהן בסדרות-זמן, ולייצא בקליק.
+          </p>
+        </header>
+
+        <form id="dataForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-7">
+          <div>
+            <label for="tickers" class="block text-sm font-black text-slate-700 mb-2">סימולי מניות</label>
+            <input id="tickers" type="text" placeholder="AAPL, MSFT, TSLA"
+              class="w-full rounded-2xl border border-slate-200 bg-white/85 px-4 py-4 outline-none shadow-sm transition focus:ring-4 focus:ring-emerald-400/30 focus:border-emerald-500" />
+            <p class="text-xs text-slate-500 mt-2">הזן סימולי מניות, מופרדים בפסיק</p>
+          </div>
+
+          <div>
+            <label for="startDate" class="block text-sm font-black text-slate-700 mb-2">תאריך התחלה</label>
+            <input id="startDate" type="date"
+              class="w-full rounded-2xl border border-slate-200 bg-white/85 px-4 py-4 outline-none shadow-sm transition focus:ring-4 focus:ring-blue-400/30 focus:border-blue-500" />
+          </div>
+
+          <div>
+            <label for="endDate" class="block text-sm font-black text-slate-700 mb-2">תאריך סיום</label>
+            <input id="endDate" type="date"
+              class="w-full rounded-2xl border border-slate-200 bg-white/85 px-4 py-4 outline-none shadow-sm transition focus:ring-4 focus:ring-blue-400/30 focus:border-blue-500" />
+          </div>
+
+          <div>
+            <label for="frequency" class="block text-sm font-black text-slate-700 mb-2">תדירות</label>
+            <select id="frequency"
+              class="w-full rounded-2xl border border-slate-200 bg-white/85 px-4 py-4 outline-none shadow-sm transition focus:ring-4 focus:ring-purple-400/30 focus:border-purple-500">
+              <option value="daily">יומי</option>
+              <option value="weekly">שבועי</option>
+              <option value="monthly">חודשי</option>
+            </select>
+          </div>
+        </form>
+
+        <button id="loadBtn"
+          class="shine glow-button w-full rounded-2xl bg-gradient-to-l from-emerald-500 via-teal-500 to-cyan-500 text-white font-black text-lg py-5 transition hover:scale-[1.01] active:scale-[0.99]">
+          טען נתונים
+        </button>
+
+        <div id="alertBox" class="hidden mt-6 rounded-2xl p-5 font-bold"></div>
+
+        <div id="loader" class="hidden mt-8 flex flex-col items-center justify-center gap-4 rounded-3xl bg-slate-950/90 text-white p-8 shadow-2xl">
+          <div class="loader-ring"></div>
+          <p class="text-lg font-black">מושך נתוני שוק...</p>
+          <p class="text-sm text-slate-300">מסדר תאריכים, משווה מניות ומכין תצוגה</p>
+        </div>
+
+        <div id="previewTable" class="mt-8"></div>
+
+        <div id="exportActions" class="hidden mt-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button id="downloadCsvBtn"
+            class="rounded-2xl bg-slate-950 text-white font-black py-4 shadow-xl transition hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99]">
+            הורד כ-CSV
+          </button>
+
+          <button id="exportSheetBtn"
+            class="rounded-2xl bg-gradient-to-l from-blue-600 to-indigo-600 text-white font-black py-4 shadow-xl transition hover:scale-[1.01] active:scale-[0.99]">
+            ייצא ל-Google Sheets
+          </button>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbynUlCcvF9T71c0-dCcsBcAKRMbxS-tx_ARnAVEKrhjXL-ht-uyl_8meCk0drpZl2Q/exec";
+    let globalCsvData = "";
+
+    const particles = document.getElementById("particles");
+
+    for (let i = 0; i < 48; i++) {
+      const particle = document.createElement("span");
+      const size = Math.random() * 5 + 2;
+
+      particle.className = "particle";
+      particle.style.width = size + "px";
+      particle.style.height = size + "px";
+      particle.style.left = Math.random() * 100 + "%";
+      particle.style.animationDelay = Math.random() * 12 + "s";
+      particle.style.animationDuration = Math.random() * 9 + 9 + "s";
+
+      particles.appendChild(particle);
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", loadData);
+    document.getElementById("downloadCsvBtn").addEventListener("click", downloadCsv);
+    document.getElementById("exportSheetBtn").addEventListener("click", exportSheet);
+
+    async function loadData() {
+      clearState();
+
+      if (!validateForm()) {
+        return;
+      }
+
+      showLoader(true);
+
+      const payload = {
+        tickers: document.getElementById('tickers').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        frequency: document.getElementById('frequency').value,
+        action: 'csv'
+      };
+
+      try {
+        const response = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'text/plain;charset=utf-8'},
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.status !== "success") {
+          throw new Error(result.message || "אירעה שגיאה לא צפויה");
+        }
+
+        globalCsvData = result.csvData;
+
+        buildPreviewTable(globalCsvData);
+        document.getElementById("exportActions").classList.remove("hidden");
+
+        showAlert("הנתונים נטענו בהצלחה. אפשר להוריד CSV או לייצא לגיליון.", "success");
+
+      } catch (error) {
+        showAlert("אופס! לא הצלחנו לטעון את הנתונים. " + error.message, "error");
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    function validateForm() {
+      const tickers = document.getElementById("tickers").value.trim();
+      const startDate = document.getElementById("startDate").value;
+      const endDate = document.getElementById("endDate").value;
+
+      if (!tickers) {
+        showAlert("אופס! צריך להזין לפחות סימול מניה אחד.", "error");
+        return false;
+      }
+
+      if (!startDate || !endDate) {
+        showAlert("אופס! צריך לבחור תאריך התחלה ותאריך סיום.", "error");
+        return false;
+      }
+
+      if (new Date(startDate) > new Date(endDate)) {
+        showAlert("אופס! נראה שתאריך ההתחלה מאוחר מתאריך הסיום...", "error");
+        return false;
+      }
+
+      return true;
+    }
+
+    function buildPreviewTable(csvData) {
+      const rows = parseCsv(csvData).slice(0, 7);
+
+      if (!rows.length) {
+        showAlert("לא נמצאו נתונים להצגה.", "error");
+        return;
+      }
+
+      let html = `
+        <div class="rounded-3xl overflow-hidden border border-white/70 shadow-2xl bg-white/90">
+          <div class="px-6 py-5 bg-slate-950 text-white">
+            <h2 class="text-xl font-black">תצוגה מקדימה</h2>
+            <p class="text-sm text-slate-300 mt-1">מוצגות עד 6 שורות ראשונות</p>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+      `;
+
+      rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0) {
+          html += `<thead><tr class="bg-slate-100">`;
+
+          row.forEach(cell => {
+            html += `<th class="px-5 py-4 text-right font-black text-slate-800 border-b border-slate-200 whitespace-nowrap">${escapeHtml(cell)}</th>`;
+          });
+
+          html += `</tr></thead><tbody>`;
+        } else {
+          html += `<tr class="hover:bg-emerald-50/80 transition">`;
+
+          row.forEach((cell, cellIndex) => {
+            const special = cellIndex === 0 ? "font-black text-slate-950" : "font-semibold text-slate-700";
+            html += `<td class="px-5 py-4 border-b border-slate-100 whitespace-nowrap ${special}">${escapeHtml(cell)}</td>`;
+          });
+
+          html += `</tr>`;
+        }
+      });
+
+      html += `
+            </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("previewTable").innerHTML = html;
+    }
+
+    function downloadCsv() {
+      if (!globalCsvData) {
+        showAlert("אין עדיין נתוני CSV להורדה.", "error");
+        return;
+      }
+
+      const blob = new Blob([globalCsvData], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = "stock-data.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+    }
+
+    async function exportSheet() {
+      if (!validateForm()) {
+        return;
+      }
+
+      showLoader(true);
+      showAlert("מייצא את הנתונים ל-Google Sheets...", "success");
+
+      const payload = {
+        tickers: document.getElementById('tickers').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        frequency: document.getElementById('frequency').value,
+        action: 'sheet'
+      };
+
+      try {
+        const response = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'text/plain;charset=utf-8'},
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.status !== "success") {
+          throw new Error(result.message || "הייצוא נכשל");
+        }
+
+        showSheetSuccess(result.sheetUrl);
+
+      } catch (error) {
+        showAlert("אופס! לא הצלחנו לייצא לגיליון. " + error.message, "error");
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    function showSheetSuccess(sheetUrl) {
+      const box = document.getElementById("alertBox");
+
+      box.className = "mt-6 rounded-2xl p-5 font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-lg";
+      box.innerHTML = `
+        <div class="text-lg font-black mb-2">הייצוא הושלם בהצלחה!</div>
+        <div class="text-sm mb-3">הגיליון החדש מוכן לצפייה.</div>
+        <a href="${escapeHtml(sheetUrl)}" target="_blank" class="inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-white font-black shadow-lg hover:bg-emerald-700 transition">
+          פתח את הגיליון
+        </a>
+      `;
+
+      box.classList.remove("hidden");
+    }
+
+    function showLoader(visible) {
+      document.getElementById("loader").classList.toggle("hidden", !visible);
+    }
+
+    function showAlert(message, type) {
+      const box = document.getElementById("alertBox");
+
+      if (type === "success") {
+        box.className = "mt-6 rounded-2xl p-5 font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-lg";
+      } else {
+        box.className = "mt-6 rounded-2xl p-5 font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-lg";
+      }
+
+      box.textContent = message;
+      box.classList.remove("hidden");
+    }
+
+    function clearState() {
+      document.getElementById("alertBox").classList.add("hidden");
+      document.getElementById("previewTable").innerHTML = "";
+      document.getElementById("exportActions").classList.add("hidden");
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let insideQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (char === '"' && insideQuotes && next === '"') {
+          cell += '"';
+          i++;
+        } else if (char === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (char === "," && !insideQuotes) {
+          row.push(cell);
+          cell = "";
+        } else if ((char === "\n" || char === "\r") && !insideQuotes) {
+          if (cell || row.length) {
+            row.push(cell);
+            rows.push(row);
+            row = [];
+            cell = "";
+          }
+
+          if (char === "\r" && next === "\n") {
+            i++;
+          }
+        } else {
+          cell += char;
+        }
+      }
+
+      if (cell || row.length) {
+        row.push(cell);
+        rows.push(row);
+      }
+
+      return rows;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>
+```
 
